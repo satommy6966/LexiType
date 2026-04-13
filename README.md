@@ -4,9 +4,10 @@ LexiType is a minimal local desktop MVP for typing-based vocabulary practice on 
 
 ## Features
 
-- Hardcoded vocabulary list
-- Shows English word and Chinese meaning
-- Type the English word and submit with Enter or the button
+- Built-in default vocabulary list
+- Import a local vocabulary file with English words and Chinese meanings
+- Shows the Chinese meaning for the current target word
+- Type directly in the word area and submit with `Space` or `Enter`
 - Tracks correct and wrong counts
 - Shows progress through the session
 - Lets you restart after completion
@@ -29,7 +30,27 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
+## Import Vocabulary
+
+Click `Import` in the app and choose a local `.txt` or `.csv` file.
+
+Use one vocabulary item per line in one of these formats:
+
+```text
+abandon	放弃；抛弃
+abate|减弱；缓和
+aberrant,异常的
+```
+
+Rules:
+
+- Left side is the English word
+- Right side is the Chinese meaning
+- Empty lines are ignored
+- Lines starting with `#` are ignored
+- The file should be saved as UTF-8
+
 ## Notes
 
-- The vocabulary list is currently hardcoded in `main.py`.
+- If no file is imported, the app uses the built-in sample vocabulary.
 - This MVP does not include file import, networking, audio, accounts, or cloud features.

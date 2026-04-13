@@ -1,8 +1,10 @@
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -15,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 
-VOCABULARY = [
+DEFAULT_VOCABULARY = [
     ("abandon", "放弃；抛弃"),
     ("abate", "减弱；缓和"),
     ("aberrant", "异常的"),
@@ -28,6 +30,7 @@ class LexiTypeWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("LexiType")
+        self.vocabulary = list(DEFAULT_VOCABULARY)
         self.correct_count = 0
         self.wrong_count = 0
         self.current_index = 0
@@ -116,12 +119,33 @@ class LexiTypeWindow(QMainWindow):
             """
         )
 
+        self.import_button = QPushButton("Import")
+        self.import_button.clicked.connect(self.import_vocabulary)
+        self.import_button.setCursor(Qt.PointingHandCursor)
+        self.import_button.setStyleSheet(
+            """
+            QPushButton {
+                background: transparent;
+                color: #646669;
+                border: 1px solid #646669;
+                border-radius: 8px;
+                font-size: 18px;
+                padding: 12px 22px;
+            }
+            QPushButton:hover {
+                color: #d1d0c5;
+                border-color: #d1d0c5;
+            }
+            """
+        )
+
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.progress_label)
         top_bar.addStretch()
         top_bar.addWidget(self.stats_label)
 
         button_row = QHBoxLayout()
+        button_row.addWidget(self.import_button)
         button_row.addWidget(self.restart_button)
         button_row.addStretch()
 
@@ -146,7 +170,31 @@ class LexiTypeWindow(QMainWindow):
         self.resize(1100, 700)
 
     def current_item(self) -> tuple[str, str]:
-        return VOCABULARY[self.current_index]
+        return self.vocabulary[self.current_index]
+
+    @staticmethod
+    def parse_vocabulary_file(file_path: str) -> list[tuple[str, str]]:
+        items = []
+        for raw_line in Path(file_path).read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            parts = None
+            for separator in ("\t", "|", ","):
+                if separator in line:
+                    parts = [part.strip() for part in line.split(separator, 1)]
+                    break
+
+            if not parts or len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError(f"Invalid line: {raw_line}")
+
+            items.append((parts[0], parts[1]))
+
+        if not items:
+            raise ValueError("Vocabulary file is empty.")
+
+        return items
 
     @staticmethod
     def color_char(character: str, color: str) -> str:
@@ -177,7 +225,7 @@ class LexiTypeWindow(QMainWindow):
 
     def render_word_list(self) -> None:
         words = []
-        for index, (word, _) in enumerate(VOCABULARY):
+        for index, (word, _) in enumerate(self.vocabulary):
             words.append(self.render_word(index, word))
         html = (
             '<div style="line-height: 1.8;">'
@@ -187,11 +235,11 @@ class LexiTypeWindow(QMainWindow):
         self.word_list.setHtml(html)
 
     def update_view(self) -> None:
-        if self.current_index < len(VOCABULARY):
+        if self.current_index < len(self.vocabulary):
             _, meaning = self.current_item()
             self.meaning_label.setText(meaning)
             self.progress_label.setText(
-                f"{self.current_index + 1} / {len(VOCABULARY)}"
+                f"{self.current_index + 1} / {len(self.vocabulary)}"
             )
             self.submit_button.setEnabled(True)
             self.render_word_list()
@@ -199,7 +247,7 @@ class LexiTypeWindow(QMainWindow):
             self.session_complete = True
             self.meaning_label.setText("本轮练习已完成")
             self.progress_label.setText(
-                f"{len(VOCABULARY)} / {len(VOCABULARY)}"
+                f"{len(self.vocabulary)} / {len(self.vocabulary)}"
             )
             self.submit_button.setEnabled(False)
             self.render_word_list()
@@ -211,7 +259,7 @@ class LexiTypeWindow(QMainWindow):
         self.setFocus()
 
     def submit_answer(self) -> None:
-        if self.current_index >= len(VOCABULARY):
+        if self.current_index >= len(self.vocabulary):
             return
 
         typed_text = self.current_input.strip()
@@ -240,6 +288,35 @@ class LexiTypeWindow(QMainWindow):
         self.status_label.setStyleSheet("font-size: 18px; color: #e2b714;")
         self.submit_button.setEnabled(True)
         self.update_view()
+
+    def import_vocabulary(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Vocabulary",
+            "",
+            "Text Files (*.txt *.csv);;All Files (*)",
+        )
+        if not file_path:
+            self.setFocus()
+            return
+
+        try:
+            imported_items = self.parse_vocabulary_file(file_path)
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Unable to load vocabulary file.\n"
+                "Use one item per line: english<TAB>中文, english|中文, or english,中文.\n\n"
+                f"Details: {exc}",
+            )
+            self.setFocus()
+            return
+
+        self.vocabulary = imported_items
+        self.restart_session()
+        self.status_label.setText(f"Imported {len(imported_items)} words")
+        self.status_label.setStyleSheet("font-size: 18px; color: #e2b714;")
 
     def keyPressEvent(self, event) -> None:
         if self.session_complete:
