@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -181,10 +182,15 @@ class LexiTypeWindow(QMainWindow):
                 continue
 
             parts = None
-            for separator in ("\t", "|", ","):
+            for separator in ("\t", "|", ",", ";"):
                 if separator in line:
                     parts = [part.strip() for part in line.split(separator, 1)]
                     break
+
+            if parts is None:
+                whitespace_parts = re.split(r"\s{2,}", line, maxsplit=1)
+                if len(whitespace_parts) == 2:
+                    parts = [part.strip() for part in whitespace_parts]
 
             if not parts or len(parts) != 2 or not parts[0] or not parts[1]:
                 raise ValueError(f"Invalid line: {raw_line}")
@@ -307,7 +313,7 @@ class LexiTypeWindow(QMainWindow):
                 self,
                 "Import Failed",
                 "Unable to load vocabulary file.\n"
-                "Use one item per line: english<TAB>中文, english|中文, or english,中文.\n\n"
+                "Use one item per line: english<TAB>中文, english|中文, english,中文, english;中文, or english  中文.\n\n"
                 f"Details: {exc}",
             )
             self.setFocus()

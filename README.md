@@ -40,12 +40,15 @@ Use one vocabulary item per line in one of these formats:
 abandon	放弃；抛弃
 abate|减弱；缓和
 aberrant,异常的
+abhor;厌恶
+abolish  废除
 ```
 
 Rules:
 
 - Left side is the English word
 - Right side is the Chinese meaning
+- You can separate the two parts with `Tab`, `|`, `,`, `;`, or at least two spaces
 - Empty lines are ignored
 - Lines starting with `#` are ignored
 - The file should be saved as UTF-8
