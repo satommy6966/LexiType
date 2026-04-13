@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -32,6 +31,9 @@ class LexiTypeWindow(QMainWindow):
         self.correct_count = 0
         self.wrong_count = 0
         self.current_index = 0
+        self.current_input = ""
+        self.session_complete = False
+        self.setFocusPolicy(Qt.StrongFocus)
 
         self.meaning_label = QLabel()
         self.meaning_label.setAlignment(Qt.AlignCenter)
@@ -53,34 +55,13 @@ class LexiTypeWindow(QMainWindow):
                 background: transparent;
                 border: none;
                 color: #646669;
-                font-size: 44px;
+                font-size: 34px;
                 font-weight: 700;
                 selection-background-color: transparent;
             }
             """
         )
         self.word_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        self.input_box = QLineEdit()
-        self.input_box.setPlaceholderText("Type here and press Enter")
-        self.input_box.returnPressed.connect(self.submit_answer)
-        self.input_box.setStyleSheet(
-            """
-            QLineEdit {
-                background: transparent;
-                border: none;
-                border-bottom: 2px solid #646669;
-                color: #d1d0c5;
-                font-size: 40px;
-                padding: 8px 0;
-                selection-background-color: #e2b714;
-                selection-color: #323437;
-            }
-            QLineEdit:focus {
-                border-bottom: 2px solid #e2b714;
-            }
-            """
-        )
 
         self.status_label = QLabel(" ")
         self.status_label.setAlignment(Qt.AlignLeft)
@@ -141,7 +122,6 @@ class LexiTypeWindow(QMainWindow):
         top_bar.addWidget(self.stats_label)
 
         button_row = QHBoxLayout()
-        button_row.addWidget(self.submit_button)
         button_row.addWidget(self.restart_button)
         button_row.addStretch()
 
@@ -153,7 +133,6 @@ class LexiTypeWindow(QMainWindow):
         layout.addWidget(self.meaning_label, alignment=Qt.AlignHCenter)
         layout.addSpacing(24)
         layout.addWidget(self.word_list)
-        layout.addWidget(self.input_box)
         layout.addWidget(self.status_label)
         layout.addLayout(button_row)
         layout.addStretch(3)
@@ -169,48 +148,73 @@ class LexiTypeWindow(QMainWindow):
     def current_item(self) -> tuple[str, str]:
         return VOCABULARY[self.current_index]
 
-    def render_word_list(self) -> None:
-        lines = []
-        for index, (word, _) in enumerate(VOCABULARY):
-            if index < self.current_index:
-                color = "#e2b714"
-            elif index == self.current_index:
-                color = "#d1d0c5"
+    @staticmethod
+    def color_char(character: str, color: str) -> str:
+        return f'<span style="color: {color};">{character}</span>'
+
+    def render_word(self, index: int, word: str) -> str:
+        if index < self.current_index:
+            return f'<span style="color: #7a7c80;">{word}</span>'
+
+        if index > self.current_index:
+            return f'<span style="color: #646669;">{word}</span>'
+
+        pieces = []
+        for position, character in enumerate(word):
+            if position < len(self.current_input):
+                if self.current_input[position] == character:
+                    pieces.append(self.color_char(character, "#e2b714"))
+                else:
+                    pieces.append(self.color_char(character, "#ff6b6b"))
             else:
-                color = "#646669"
-            lines.append(f'<div style="color: {color}; margin: 8px 0;">{word}</div>')
-        self.word_list.setHtml("".join(lines))
+                pieces.append(self.color_char(character, "#d1d0c5"))
+
+        if len(self.current_input) > len(word):
+            for character in self.current_input[len(word) :]:
+                pieces.append(self.color_char(character, "#ff6b6b"))
+
+        return "".join(pieces)
+
+    def render_word_list(self) -> None:
+        words = []
+        for index, (word, _) in enumerate(VOCABULARY):
+            words.append(self.render_word(index, word))
+        html = (
+            '<div style="line-height: 1.8;">'
+            + "&nbsp;&nbsp;".join(words)
+            + "</div>"
+        )
+        self.word_list.setHtml(html)
 
     def update_view(self) -> None:
         if self.current_index < len(VOCABULARY):
-            word, meaning = self.current_item()
+            _, meaning = self.current_item()
             self.meaning_label.setText(meaning)
             self.progress_label.setText(
                 f"{self.current_index + 1} / {len(VOCABULARY)}"
             )
             self.submit_button.setEnabled(True)
-            self.input_box.setEnabled(True)
             self.render_word_list()
         else:
+            self.session_complete = True
             self.meaning_label.setText("本轮练习已完成")
             self.progress_label.setText(
                 f"{len(VOCABULARY)} / {len(VOCABULARY)}"
             )
             self.submit_button.setEnabled(False)
-            self.input_box.setEnabled(False)
             self.render_word_list()
             QMessageBox.information(self, "LexiType", "Completed. You can restart.")
 
         self.stats_label.setText(
             f"Correct {self.correct_count}   Wrong {self.wrong_count}"
         )
-        self.input_box.setFocus()
+        self.setFocus()
 
     def submit_answer(self) -> None:
         if self.current_index >= len(VOCABULARY):
             return
 
-        typed_text = self.input_box.text().strip()
+        typed_text = self.current_input.strip()
         correct_word, _ = self.current_item()
 
         if typed_text == correct_word:
@@ -223,19 +227,44 @@ class LexiTypeWindow(QMainWindow):
             self.status_label.setStyleSheet("font-size: 18px; color: #ff6b6b;")
 
         self.current_index += 1
-        self.input_box.clear()
+        self.current_input = ""
         self.update_view()
 
     def restart_session(self) -> None:
         self.correct_count = 0
         self.wrong_count = 0
         self.current_index = 0
+        self.current_input = ""
+        self.session_complete = False
         self.status_label.setText(" ")
         self.status_label.setStyleSheet("font-size: 18px; color: #e2b714;")
-        self.input_box.clear()
-        self.input_box.setEnabled(True)
         self.submit_button.setEnabled(True)
         self.update_view()
+
+    def keyPressEvent(self, event) -> None:
+        if self.session_complete:
+            if event.key() in {Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space}:
+                self.restart_session()
+                return
+            super().keyPressEvent(event)
+            return
+
+        if event.key() == Qt.Key_Backspace:
+            self.current_input = self.current_input[:-1]
+            self.render_word_list()
+            return
+
+        if event.key() in {Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space}:
+            self.submit_answer()
+            return
+
+        text = event.text()
+        if text and text.isalpha():
+            self.current_input += text.lower()
+            self.render_word_list()
+            return
+
+        super().keyPressEvent(event)
 
 
 def main() -> int:
