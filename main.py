@@ -41,25 +41,31 @@ class TypingCanvas(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.tokens: list[str] = []
+        self.meanings: list[str] = []
         self.char_entries: list[dict] = []
         self.cursor_position = 0
         self.active_token_index = 0
         self.token_char_ranges: list[tuple[int, int]] = []
-        self.token_positions: list[tuple[int, int]] = []
+        self.token_positions: list[tuple[int, int, int]] = []
         self.scroll_offset = 0
         self.font_main = QFont("Menlo", 29, QFont.Weight.Bold)
+        self.font_meaning = QFont("PingFang SC", 14, QFont.Weight.Medium)
+        self.line_step = 0
+        self.line_tops: list[int] = []
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumHeight(320)
 
     def set_state(
         self,
         tokens: list[str],
+        meanings: list[str],
         char_entries: list[dict],
         cursor_position: int,
         active_token_index: int,
         token_char_ranges: list[tuple[int, int]],
     ) -> None:
         self.tokens = tokens
+        self.meanings = meanings
         self.char_entries = char_entries
         self.cursor_position = cursor_position
         self.active_token_index = active_token_index
@@ -70,22 +76,26 @@ class TypingCanvas(QWidget):
 
     def relayout(self) -> None:
         metrics = QFontMetrics(self.font_main)
+        meaning_metrics = QFontMetrics(self.font_meaning)
         left = 8
         top = 8
         token_gap = 34
-        line_gap = 26
+        line_gap = 44
         usable_width = max(self.width() - left * 2, 200)
+        self.line_step = metrics.height() + meaning_metrics.height() + line_gap
 
         x = left
         y = top + metrics.ascent()
         self.token_positions = []
+        self.line_tops = [top]
 
         for token in self.tokens:
             token_width = metrics.horizontalAdvance(token)
             if x > left and x + token_width > left + usable_width:
                 x = left
-                y += metrics.height() + line_gap
-            self.token_positions.append((x, y))
+                y += self.line_step
+                self.line_tops.append(y - metrics.ascent())
+            self.token_positions.append((x, y, token_width))
             x += token_width + token_gap
 
     def center_active_token(self) -> None:
@@ -95,15 +105,23 @@ class TypingCanvas(QWidget):
 
         index = min(self.active_token_index, len(self.token_positions) - 1)
         metrics = QFontMetrics(self.font_main)
+        meaning_metrics = QFontMetrics(self.font_meaning)
         baseline_y = self.token_positions[index][1]
         line_top = baseline_y - metrics.ascent()
-        line_center = line_top + metrics.height() // 2
-        viewport_center = self.height() // 2
         content_bottom = (
-            self.token_positions[-1][1] - metrics.ascent() + metrics.height()
+            self.token_positions[-1][1]
+            - metrics.ascent()
+            + metrics.height()
+            + meaning_metrics.height()
         )
         max_scroll = max(0, content_bottom - self.height())
-        target_scroll = line_center - viewport_center
+        if self.line_step <= 0:
+            self.scroll_offset = max(0, min(line_top, max_scroll))
+            return
+
+        # 按“整行高度”滚动，而不是按字符中心滚动，确保每次翻页都能完整显示该行英文和汉译。
+        row_index = max((line_top - self.line_tops[0]) // self.line_step, 0)
+        target_scroll = row_index * self.line_step
         self.scroll_offset = max(0, min(target_scroll, max_scroll))
 
     def resizeEvent(self, event) -> None:
@@ -152,18 +170,52 @@ class TypingCanvas(QWidget):
                     y + 8,
                 )
 
+    def draw_meaning(
+        self,
+        painter: QPainter,
+        x: int,
+        baseline_y: int,
+        token_width: int,
+        meaning: str,
+        is_active: bool,
+    ) -> None:
+        painter.save()
+        painter.setFont(self.font_meaning)
+        meaning_metrics = QFontMetrics(self.font_meaning)
+        color = QColor("#e2b714") if is_active else QColor("#8f7a2c")
+        painter.setPen(color)
+        meaning_width = meaning_metrics.horizontalAdvance(meaning)
+        meaning_x = x + max((token_width - meaning_width) // 2, 0)
+        meaning_y = baseline_y + meaning_metrics.ascent() + 18
+        painter.drawText(meaning_x, meaning_y - self.scroll_offset, meaning)
+        painter.restore()
+
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.TextAntialiasing, True)
         painter.setFont(self.font_main)
         metrics = QFontMetrics(self.font_main)
+        meaning_metrics = QFontMetrics(self.font_meaning)
 
-        for index, (token, (x, baseline_y)) in enumerate(zip(self.tokens, self.token_positions)):
+        for index, (token, (x, baseline_y, token_width)) in enumerate(
+            zip(self.tokens, self.token_positions)
+        ):
+            line_top = baseline_y - metrics.ascent() - self.scroll_offset
+            line_bottom = line_top + metrics.height() + meaning_metrics.height() + 18
             draw_y = baseline_y - self.scroll_offset
-            if draw_y < -metrics.height() or draw_y > self.height() + metrics.height():
+            if line_bottom < 0 or line_top > self.height():
                 continue
             self.draw_token(painter, metrics, token, index, x, draw_y)
+            if index < len(self.meanings):
+                self.draw_meaning(
+                    painter,
+                    x,
+                    baseline_y,
+                    token_width,
+                    self.meanings[index],
+                    index == self.active_token_index,
+                )
 
 
 class LexiTypeWindow(QMainWindow):
@@ -189,12 +241,6 @@ class LexiTypeWindow(QMainWindow):
 
         self.progress_label = QLabel()
         self.progress_label.setStyleSheet("font-size: 18px; color: #e2b714;")
-
-        self.meaning_label = QLabel()
-        self.meaning_label.setAlignment(Qt.AlignCenter)
-        self.meaning_label.setStyleSheet(
-            "font-size: 38px; font-weight: 700; color: #e2b714;"
-        )
 
         self.wordbook_selector = QComboBox()
         self.wordbook_selector.currentTextChanged.connect(self.change_wordbook)
@@ -249,14 +295,10 @@ class LexiTypeWindow(QMainWindow):
 
         layout = QVBoxLayout()
         layout.setContentsMargins(56, 36, 56, 40)
-        layout.setSpacing(18)
+        layout.setSpacing(12)
         layout.addLayout(top_bar)
-        layout.addStretch(2)
-        layout.addWidget(self.meaning_label, alignment=Qt.AlignHCenter)
-        layout.addSpacing(18)
         layout.addWidget(self.typing_canvas)
         layout.addLayout(button_row)
-        layout.addStretch(2)
 
         container = QWidget()
         container.setLayout(layout)
@@ -429,22 +471,21 @@ class LexiTypeWindow(QMainWindow):
 
     def update_view(self) -> None:
         total_tokens = len(self.tokens)
+        typed_length = sum(1 for char in self.char_array_b if char != "")
+        self.session_complete = bool(self.char_array_a) and typed_length == len(self.char_array_a)
         if total_tokens == 0:
             self.progress_label.setText("0 / 0")
-            self.meaning_label.setText("没有可练习的词表")
         elif self.session_complete:
             self.progress_label.setText(f"{total_tokens} / {total_tokens}")
-            self.meaning_label.setText("本轮练习已完成")
         else:
             self.update_active_token_index()
-            _, meaning = self.vocabulary[self.active_token_index]
             self.progress_label.setText(
                 f"{self.active_token_index + 1} / {total_tokens}"
             )
-            self.meaning_label.setText(meaning)
 
         self.typing_canvas.set_state(
             self.tokens,
+            [meaning for _, meaning in self.vocabulary],
             self.char_array_a,
             self.cursor_position,
             self.active_token_index,
@@ -509,20 +550,17 @@ class LexiTypeWindow(QMainWindow):
             1 if chars_match(typed_char, target_char) else 0
         )
         self.cursor_position += 1
-
-        if self.cursor_position >= len(self.char_array_a):
-            self.session_complete = True
-
         self.update_view()
+        if self.session_complete:
+            QMessageBox.information(self, "LexiType", "打字完成")
 
     def handle_backspace(self) -> None:
-        if self.cursor_position <= 0:
+        if self.session_complete or self.cursor_position <= 0:
             return
 
         self.cursor_position -= 1
         self.char_array_b[self.cursor_position] = ""
         self.char_array_a[self.cursor_position]["flag"] = 2
-        self.session_complete = False
         self.update_view()
 
     def keyPressEvent(self, event) -> None:
@@ -530,13 +568,16 @@ class LexiTypeWindow(QMainWindow):
             super().keyPressEvent(event)
             return
 
+        if self.session_complete:
+            if event.key() in {Qt.Key_Return, Qt.Key_Enter}:
+                self.restart_session()
+            return
+
         if event.key() == Qt.Key_Backspace:
             self.handle_backspace()
             return
 
         if event.key() in {Qt.Key_Return, Qt.Key_Enter}:
-            if self.session_complete:
-                self.restart_session()
             return
 
         text = event.text()
