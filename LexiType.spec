@@ -45,6 +45,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='LexiType.app',
-    icon=None,
+    icon='assets/LexiType.png',
     bundle_identifier=None,
 )

@@ -392,9 +392,9 @@
 		<data>
 		S28piIRxddgisq52CJXHyHsV2kM=
 		</data>
-		<key>Resources/icon-windowed.icns</key>
+		<key>Resources/generated-4b0b8c049850bbfc84497230f7c64db50f2d4684b2d446c337bb2d799a0b0b09.icns</key>
 		<data>
-		eEHOuYpZLB0vKGVIWGZOh5rH8+o=
+		avs+kZ5hweFzyXeoexw3eZcRd90=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -1920,11 +1920,11 @@
 			j+4CYKwfbFgyj4GjapjSYRWU1DgV3qw3lkzwQI3bn9Q=
 			</data>
 		</dict>
-		<key>Resources/icon-windowed.icns</key>
+		<key>Resources/generated-4b0b8c049850bbfc84497230f7c64db50f2d4684b2d446c337bb2d799a0b0b09.icns</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			uQo7VuWRab4Phv4EEGmfQsyqFqDIXZgO8OtgaAMvCzY=
+			4W79WWsPBRrFSyOwAQnuDvqegwOzZECni7ke+oLAC5U=
 			</data>
 		</dict>
 		<key>Resources/libcrypto.3.dylib</key>
