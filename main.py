@@ -28,7 +28,8 @@ DEFAULT_VOCABULARY = [
     ("abolish", "废除"),
 ]
 
-WORDBOOKS_PATH = Path(__file__).with_name("wordbooks.json")
+APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "LexiType"
+WORDBOOKS_PATH = APP_SUPPORT_DIR / "wordbooks.json"
 
 
 def chars_match(typed_char: str, target_char: str) -> bool:
@@ -402,6 +403,7 @@ class LexiTypeWindow(QMainWindow):
                 for name, entries in self.wordbooks.items()
             },
         }
+        APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
         WORDBOOKS_PATH.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",

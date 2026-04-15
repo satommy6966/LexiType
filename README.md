@@ -33,6 +33,27 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
+## Build macOS App
+
+Build a local macOS `.app` bundle with PyInstaller:
+
+```bash
+source .venv/bin/activate
+pip install pyinstaller
+pyinstaller --windowed --name LexiType main.py
+```
+
+After the build finishes, the app bundle will be here:
+
+```bash
+dist/LexiType.app
+```
+
+Notes:
+
+- Imported wordbooks are stored in `~/Library/Application Support/LexiType/wordbooks.json`
+- On another Mac, you may need to remove Gatekeeper quarantine the first time if the app is unsigned
+
 ## Import Vocabulary
 
 Click `Import` in the app and choose a local `.txt` or `.csv` file.
