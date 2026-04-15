@@ -52,6 +52,7 @@ class TypingCanvas(QWidget):
         self.font_meaning = QFont("PingFang SC", 14, QFont.Weight.Medium)
         self.line_step = 0
         self.line_tops: list[int] = []
+        self.row_height = 0
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumHeight(320)
 
@@ -82,7 +83,8 @@ class TypingCanvas(QWidget):
         token_gap = 34
         line_gap = 44
         usable_width = max(self.width() - left * 2, 200)
-        self.line_step = metrics.height() + meaning_metrics.height() + line_gap
+        self.row_height = metrics.height() + meaning_metrics.height() + 18
+        self.line_step = self.row_height + (line_gap - 18)
 
         x = left
         y = top + metrics.ascent()
@@ -105,24 +107,48 @@ class TypingCanvas(QWidget):
 
         index = min(self.active_token_index, len(self.token_positions) - 1)
         metrics = QFontMetrics(self.font_main)
-        meaning_metrics = QFontMetrics(self.font_meaning)
         baseline_y = self.token_positions[index][1]
         line_top = baseline_y - metrics.ascent()
         content_bottom = (
             self.token_positions[-1][1]
             - metrics.ascent()
-            + metrics.height()
-            + meaning_metrics.height()
+            + self.row_height
         )
         max_scroll = max(0, content_bottom - self.height())
         if self.line_step <= 0:
             self.scroll_offset = max(0, min(line_top, max_scroll))
             return
 
-        # 按“整行高度”滚动，而不是按字符中心滚动，确保每次翻页都能完整显示该行英文和汉译。
-        row_index = max((line_top - self.line_tops[0]) // self.line_step, 0)
-        target_scroll = row_index * self.line_step
-        self.scroll_offset = max(0, min(target_scroll, max_scroll))
+        # 当前整行块在视口中的上下边界。
+        visible_top = line_top - self.scroll_offset
+        visible_bottom = visible_top + self.row_height
+
+        # 希望屏幕里先累积 3-4 行，再翻到下一屏。
+        # 这里把触发线固定在第 4 行附近；只有当当前整行块会被裁掉时才翻。
+        trigger_lines_before_scroll = 3
+        desired_scroll = self.scroll_offset
+
+        safe_top = 0
+        safe_bottom = self.height()
+
+        if visible_top < safe_top:
+            row_index = max((line_top - self.line_tops[0]) // self.line_step, 0)
+            desired_top_row = max(row_index - trigger_lines_before_scroll, 0)
+            desired_scroll = desired_top_row * self.line_step
+        elif visible_bottom > safe_bottom:
+            row_index = max((line_top - self.line_tops[0]) // self.line_step, 0)
+            desired_top_row = max(row_index - trigger_lines_before_scroll, 0)
+            desired_scroll = desired_top_row * self.line_step
+
+            # 如果按“前面保留 3 行”计算后，这一整行仍然放不下，就继续整行下推，
+            # 直到当前整行块完全进入可视区域。
+            while (
+                line_top - desired_scroll + self.row_height > safe_bottom
+                and desired_scroll < max_scroll
+            ):
+                desired_scroll += self.line_step
+
+        self.scroll_offset = max(0, min(desired_scroll, max_scroll))
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -196,13 +222,12 @@ class TypingCanvas(QWidget):
         painter.setRenderHint(QPainter.TextAntialiasing, True)
         painter.setFont(self.font_main)
         metrics = QFontMetrics(self.font_main)
-        meaning_metrics = QFontMetrics(self.font_meaning)
 
         for index, (token, (x, baseline_y, token_width)) in enumerate(
             zip(self.tokens, self.token_positions)
         ):
             line_top = baseline_y - metrics.ascent() - self.scroll_offset
-            line_bottom = line_top + metrics.height() + meaning_metrics.height() + 18
+            line_bottom = line_top + self.row_height
             draw_y = baseline_y - self.scroll_offset
             if line_bottom < 0 or line_top > self.height():
                 continue
